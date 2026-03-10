@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Business Card AR</title>
+    <title>Business Card AR - Snow</title>
 
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script> 
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.1/dist/mindar-image-aframe.prod.js"></script>
@@ -14,6 +14,7 @@
         overflow: hidden;
       }
 
+      /* OVERLAY 1: Flip Card (Starts visible, hides on target found) */
       #ui-overlay {
         position: fixed;
         top: 0;
@@ -24,11 +25,31 @@
         z-index: 999;
         display: flex;
         justify-content: center; 
-        align-items: flex-start; 
-        padding-top: 40px;       
+        align-items: flex-start; /* Stuck to the top */
+        padding-top: 40px;       /* Gap from the top */
         box-sizing: border-box;
         transition: opacity 0.8s ease-out;
         opacity: 1;
+        font-family: 'Noto Sans', sans-serif;
+      }
+
+      /* OVERLAY 2: Swipe Prompt (Matches ui-overlay exactly, but starts hidden) */
+      #swipe-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none; 
+        z-index: 999;
+        display: flex;
+        justify-content: center; 
+        align-items: flex-start; /* Stuck to the top exactly like the other one */
+        padding-top: 40px;       /* Exact same gap from top */
+        box-sizing: border-box;
+        transition: opacity 0.8s ease-out;
+        opacity: 0; /* Hidden by default until AR target is found */
+        font-family: 'Noto Sans', sans-serif;
       }
 
       .overlay-text {
@@ -42,17 +63,19 @@
         max-width: 90%; 
         padding: 15px 25px;      
         pointer-events: none;
-        /* Optional: Ein leichter Hintergrund, damit der Text auf der Kamera gut lesbar ist */
-        background: rgba(0, 0, 0, 0.4); 
+        background: rgba(0, 0, 0, 0.6); 
         border-radius: 20px;
       }
 
-      #ui-overlay.hidden {
-        opacity: 0;
-      }
+      /* Utility classes for toggling visibility */
+      #ui-overlay.hidden { opacity: 0; }
+      #swipe-overlay.visible { opacity: 1; }
     </style>
 
     <script> 
+      // Globale Variable, die sich merkt, ob schon gewischt wurde
+      window.hasSwiped = false;
+
       AFRAME.registerComponent('click-link', {
         schema: {url: {type: 'string'}},
         init: function () {
@@ -74,6 +97,16 @@
           const handleEnd = (clientX) => {
             const diffX = clientX - this.startX;
             if (Math.abs(diffX) > 50) {
+              
+              // Versteckt das 2D-Text-Objekt beim ersten erfolgreichen Wischen permanent
+              if (!window.hasSwiped) {
+                const swipeOverlay = document.querySelector("#swipe-overlay");
+                if (swipeOverlay) {
+                  swipeOverlay.classList.remove("visible");
+                }
+                window.hasSwiped = true;
+              }
+
               if (diffX > 0) {
                 this.currentSide++; // Swipe Left
               } else {
@@ -102,12 +135,25 @@
 
       AFRAME.registerComponent('mytarget', {
         init: function () {
-          const overlay = document.querySelector("#ui-overlay");
+          const flipOverlay = document.querySelector("#ui-overlay");
+          const swipeOverlay = document.querySelector("#swipe-overlay");
           
           // Listen for detection
           this.el.addEventListener('targetFound', () => {
-            // Add a 'hidden' class for a smooth fade out
-            overlay.classList.add("hidden");
+            // Verstecke "Flip the card"
+            flipOverlay.classList.add("hidden");
+            
+            // Zeige das 2D "Swipe the logo!", falls noch nicht gewischt wurde
+            if (!window.hasSwiped && swipeOverlay) {
+               swipeOverlay.classList.add("visible");
+            }
+          });
+
+          // Verstecke den 2D-Text wieder, wenn die Kamera die Karte verliert
+          this.el.addEventListener('targetLost', () => {
+             if (swipeOverlay) {
+               swipeOverlay.classList.remove("visible");
+             }
           });
         }
       });
@@ -115,7 +161,8 @@
   </head>
 
   <body>
-    <a-scene mindar-image="imageTargetSrc: ./targets_RisingTides.mind; showStats: false;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+
+    <a-scene mindar-image="imageTargetSrc: ./targets_RisingTides.mind; showStats: false; filterMinCF: 0.001; filterBeta: 0.01;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
       
       <a-assets>
         <a-asset-item id="my-model" src="260225_Logo3D.glb"></a-asset-item>
@@ -128,7 +175,7 @@
       <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse;" raycaster="far: 10000; objects: .clickable"></a-camera>
 
       <a-entity id="mytarget" mytarget mindar-image-target="targetIndex: 0" rotation="0 0 0">
-        
+
         <a-entity id="rotation-wrapper" rotation="90 0 0" position="0 0 0">
              <a-gltf-model src="#my-model" position="0 0 0" rotation="0 0 0" scale="4 4 4" snap-rotate></a-gltf-model>
         </a-entity>
@@ -144,7 +191,12 @@
     </a-scene>
 
     <div id="ui-overlay">
-        <p class="overlay-text">Flip the business card to the other side</p>
+        <p class="overlay-text">Flip the business card to the other side.</p>
     </div>
+
+    <div id="swipe-overlay">
+        <p class="overlay-text">Swipe the 3D logo!</p>
+    </div>
+
   </body>
 </html>
